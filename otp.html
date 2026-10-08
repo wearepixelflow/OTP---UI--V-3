@@ -1,0 +1,1179 @@
+<!doctype html>
+<!--
+  ============================================================
+  OTP VERIFICATION SCREEN  -  one file, copy it anywhere
+  ============================================================
+
+  QUICK START (3 steps)
+  1. Open this file in your browser. It works right away in demo mode.
+     The demo code is 482913.
+  2. Make it yours:
+       - Colors, fonts, corner roundness  -> "1. EASY CUSTOMIZATION" in the CSS
+       - Wording (every message you see)  -> "TEXT" in the script
+       - Timing, attempts, phone number   -> "CONFIG" in the script
+  3. Connect your server:
+       - Replace verify() and resend() in CONFIG (examples are included)
+       - Set demo: false to remove the demo controls
+
+  The file has 3 parts:  <style> (look)  ->  <body> (structure)  ->  <script> (behavior)
+  ============================================================
+-->
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Verify your number</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Set theme before first paint (no flash). -->
+<script>
+  try {
+    var t = localStorage.getItem('otp-theme') ||
+      (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
+
+<style>
+  /* ===============================================================
+     1. EASY CUSTOMIZATION
+     Change the values below to restyle the whole screen.
+     (Dark theme colors live a little further down.)
+  =============================================================== */
+  :root {
+    --accent: #2446F2;      /* main brand color: ring, button, links */
+    --accent-2: #6F8BFF;    /* lighter shade used in the underline */
+    --on-accent: #FFFFFF;   /* text color on top of the accent button */
+    --radius: 28px;         /* card corner roundness */
+    --notch: 13px;          /* size of the ticket notches */
+
+    /* Fit-to-screen sizes: they shrink with the window height so the
+       whole screen stays on one page with no scrolling. */
+    --dial:       clamp(96px, 19dvh, 160px);   /* ring size */
+    --stub-top:   clamp(18px, 4.6dvh, 40px);
+    --gap-dial:   clamp(10px, 2.6dvh, 24px);
+    --gap-meta:   clamp(12px, 3dvh, 26px);
+    --stub-bot:   clamp(14px, 3.4dvh, 28px);
+    --panel-top:  clamp(16px, 3.8dvh, 30px);
+    --panel-bot:  clamp(14px, 3.4dvh, 26px);
+    --slot-h:     clamp(48px, 8.4dvh, 60px);   /* digit box height */
+    --gap-status: clamp(6px, 1.6dvh, 10px);
+    --gap-status2:clamp(10px, 2.4dvh, 18px);
+    --btn-h:      clamp(44px, 6.4dvh, 48px);
+    --gap-row:    clamp(10px, 2.4dvh, 18px);
+
+    /* Everything below is the supporting palette. Safe to leave as is. */
+    --font-ui: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-num: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --ease-out: cubic-bezier(.2, .8, .2, 1);
+
+    color-scheme: light;
+    --bg: #E4E9F0;
+    --surface: #FCFDFE;
+    --sunk: #EEF1F6;
+    --ink: #0F1B2D;
+    --ink-2: #4B5B72;
+    --ink-3: #8190A5;
+    --line: #D8DFEA;
+    --perf: #BFC9D8;
+    --warn: #D98200;
+    --warn-text: #9A5A00;
+    --danger: #D6334F;
+    --danger-text: #B3213C;
+    --ok: #0C9163;
+    --ok-text: #0A7551;
+    --shadow: 14 27 46;
+    --noise-opacity: .07;
+    --noise-invert: 0;
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #080D18;
+    --surface: #111A2C;
+    --sunk: #0B1220;
+    --ink: #EDF1F9;
+    --ink-2: #9BA9BF;
+    --ink-3: #66758C;
+    --line: #223049;
+    --perf: #30415E;
+    --accent: #7F9AFF;
+    --accent-2: #B5C4FF;
+    --on-accent: #08101F;
+    --warn: #F5A524;
+    --warn-text: #F5B84D;
+    --danger: #FF6F8A;
+    --danger-text: #FF8FA3;
+    --ok: #3DD6A0;
+    --ok-text: #5BE0B1;
+    --shadow: 0 0 0;
+    --noise-opacity: .06;
+    --noise-invert: 1;
+  }
+
+  /* ===============================================================
+     2. PAGE + CARD LAYOUT  (you rarely need to touch this)
+  =============================================================== */
+  [hidden] { display: none !important; }
+  *, *::before, *::after { box-sizing: border-box; }
+  * { margin: 0; }
+
+  body {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: max(clamp(10px, 2.6dvh, 24px), env(safe-area-inset-top)) 16px max(clamp(10px, 2.6dvh, 24px), env(safe-area-inset-bottom));
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition: background-color .35s;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: var(--noise-opacity);
+    filter: invert(var(--noise-invert));
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .sr {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  .stage {
+    position: relative;
+    width: min(100%, 392px);
+    display: grid;
+    gap: clamp(8px, 2dvh, 22px);
+  }
+
+  /* ---------------------------------------------------------------
+     The pass: two sections joined by a perforated seam
+  --------------------------------------------------------------- */
+  .pass {
+    display: grid;
+    filter:
+      drop-shadow(0 1px 1px rgb(var(--shadow) / .08))
+      drop-shadow(0 10px 18px rgb(var(--shadow) / .08))
+      drop-shadow(0 30px 56px rgb(var(--shadow) / .14));
+  }
+
+  .stub, .panel {
+    position: relative;
+    background: var(--surface);
+    transition: background-color .35s;
+  }
+
+  .stub {
+    padding: var(--stub-top) clamp(20px, 8vw, 32px) var(--stub-bot);
+    border-radius: var(--radius) var(--radius) 0 0;
+    text-align: center;
+    -webkit-mask:
+      radial-gradient(circle var(--notch) at 0 100%, #0000 calc(100% - .5px), #000) left / 51% 100% no-repeat,
+      radial-gradient(circle var(--notch) at 100% 100%, #0000 calc(100% - .5px), #000) right / 51% 100% no-repeat;
+            mask:
+      radial-gradient(circle var(--notch) at 0 100%, #0000 calc(100% - .5px), #000) left / 51% 100% no-repeat,
+      radial-gradient(circle var(--notch) at 100% 100%, #0000 calc(100% - .5px), #000) right / 51% 100% no-repeat;
+  }
+
+  .panel {
+    margin-top: -1px; /* hides sub-pixel seam between the two masked layers */
+    padding: var(--panel-top) clamp(20px, 8vw, 32px) var(--panel-bot);
+    border-radius: 0 0 var(--radius) var(--radius);
+    -webkit-mask:
+      radial-gradient(circle var(--notch) at 0 0, #0000 calc(100% - .5px), #000) left / 51% 100% no-repeat,
+      radial-gradient(circle var(--notch) at 100% 0, #0000 calc(100% - .5px), #000) right / 51% 100% no-repeat;
+            mask:
+      radial-gradient(circle var(--notch) at 0 0, #0000 calc(100% - .5px), #000) left / 51% 100% no-repeat,
+      radial-gradient(circle var(--notch) at 100% 0, #0000 calc(100% - .5px), #000) right / 51% 100% no-repeat;
+  }
+
+  .panel::before { /* perforation */
+    content: "";
+    position: absolute;
+    top: 0;
+    left: calc(var(--notch) + 14px);
+    right: calc(var(--notch) + 14px);
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--perf) 0 5px, transparent 5px 11px);
+  }
+
+  /* ---------------------------------------------------------------
+     Dial: outer ring = time left, inner segments = digits entered
+  --------------------------------------------------------------- */
+  .dial {
+    --ring: var(--accent);
+    --seg: var(--accent);
+    position: relative;
+    width: var(--dial);
+    height: var(--dial);
+    margin: 0 auto var(--gap-dial);
+  }
+  .dial.is-urgent { --ring: var(--warn); }
+  .dial.is-error  { --ring: var(--danger); --seg: var(--danger); }
+  .pass.is-success .dial { --ring: var(--ok); --seg: var(--ok); }
+
+  .dial-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+  .ring-track { fill: none; stroke: var(--line); stroke-width: 3; }
+  .ring-prog {
+    fill: none;
+    stroke: var(--ring);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 1 2;
+    stroke-dashoffset: -1;
+    opacity: 0;
+    transition: stroke .35s;
+  }
+
+  .seg { fill: none; stroke: var(--line); stroke-width: 5; stroke-linecap: round; transition: stroke .25s; }
+  .seg.is-on { stroke: var(--seg); }
+
+  .dial.is-verifying .seg { animation: chase 1s ease-in-out infinite; animation-delay: calc(var(--i) * 120ms); }
+  @keyframes chase { 0%, 100% { opacity: .3; } 40% { opacity: 1; } }
+
+  .core { position: absolute; inset: 0; display: grid; place-items: center; }
+  .core > * { grid-area: 1 / 1; transition: opacity .25s, transform .35s var(--ease-out); }
+
+  .core-icon {
+    width: calc(var(--dial) * .21); height: calc(var(--dial) * .21);
+    fill: none; stroke: var(--ink-2); stroke-width: 1.5;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .core-icon circle { fill: var(--ink-2); stroke: none; }
+  .core-count {
+    font: 500 calc(var(--dial) * .21)/1 var(--font-num);
+    font-variant-numeric: tabular-nums;
+    color: var(--warn-text);
+    opacity: 0;
+    transform: scale(.85);
+  }
+  .core-check {
+    width: calc(var(--dial) * .29); height: calc(var(--dial) * .29);
+    fill: none; stroke: var(--ok); stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .core-check path { stroke-dasharray: 1; stroke-dashoffset: 1; }
+
+  .dial.is-urgent .core-icon { opacity: 0; transform: scale(.8); }
+  .dial.is-urgent .core-count { opacity: 1; transform: none; }
+  .dial.is-expired .core-icon { opacity: .35; }
+  .pass.is-success .core-icon,
+  .pass.is-success .core-count { opacity: 0; transform: scale(.8); }
+  .pass.is-success .core-check path { animation: draw .5s .45s var(--ease-out) forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  /* ---------------------------------------------------------------
+     Stub copy + delivery row
+  --------------------------------------------------------------- */
+  .title {
+    font-size: 22px;
+    line-height: 28px;
+    font-weight: 600;
+    letter-spacing: -.012em;
+  }
+  .lede {
+    margin: 8px auto 0;
+    max-width: 30ch;
+    font-size: 14.5px;
+    line-height: 22px;
+    color: var(--ink-2);
+    text-wrap: balance;
+  }
+  .lede .num { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .swap { animation: swap .4s var(--ease-out); }
+  @keyframes swap { from { opacity: 0; transform: translateY(4px); } }
+
+  .meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: var(--gap-meta);
+    font-size: 13px;
+    line-height: 16px;
+    color: var(--ink-2);
+  }
+  .pass.is-success .meta { justify-content: center; }
+
+  .live { display: inline-flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+  .dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); transition: background-color .3s; }
+  .dot::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: var(--ok);
+    animation: ping 2.2s var(--ease-out) infinite;
+  }
+  @keyframes ping { 0% { transform: scale(1); opacity: .5; } 70%, 100% { transform: scale(3); opacity: 0; } }
+  .live[data-state="expired"] .dot { background: var(--ink-3); }
+  .live[data-state="expired"] .dot::after { display: none; }
+  .pass.is-success .dot::after { display: none; }
+
+  .attempts { display: inline-flex; align-items: center; gap: 8px; }
+  .attempts[hidden] { display: none; }
+  .pips { display: inline-flex; gap: 4px; }
+  .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-2); transition: background-color .25s, box-shadow .25s; }
+  .pip.is-used { background: transparent; box-shadow: inset 0 0 0 1.25px var(--ink-3); }
+  .attempts[data-low="true"] { color: var(--danger-text); }
+  .attempts[data-low="true"] .pip:not(.is-used) { background: var(--danger); }
+
+  /* ---------------------------------------------------------------
+     Code field: one real input, six drawn slots
+  --------------------------------------------------------------- */
+  .views { display: grid; }
+  .view { grid-area: 1 / 1; transition: opacity .35s, visibility 0s; }
+  .view[inert] { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .3s, visibility 0s .3s; }
+  .view-done { display: grid; align-content: center; }
+
+  .field { position: relative; }
+  /* Six separate, clearly outlined boxes: easy to see, easy to count. */
+  .tray {
+    display: grid;
+    grid-template-columns: repeat(var(--len, 6), 1fr);
+    gap: clamp(6px, 2.2vw, 10px);
+    transition: opacity .3s .5s;
+  }
+  .pass.is-success .tray { opacity: 0; }
+
+  .slot {
+    position: relative;
+    height: var(--slot-h);
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    background: var(--sunk);                 /* empty box */
+    border: 1.5px solid var(--ink-3);
+    transition: background-color .15s, border-color .15s, box-shadow .15s;
+  }
+  .slot.is-filled {                          /* box with a digit in it */
+    background: var(--surface);
+    border-color: var(--ink-2);
+  }
+  .slot.is-active {                          /* the box you are typing in */
+    background: var(--surface);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  .field.is-error .slot {                    /* wrong code */
+    background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+    border-color: var(--danger);
+    box-shadow: none;
+  }
+  .field.is-disabled .slot { opacity: .5; }
+
+  .digit {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    font: 500 clamp(24px, calc(var(--slot-h) * .5), 30px)/1 var(--font-num);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    z-index: 1;
+    transition: color .25s;
+  }
+  .digit.pop { animation: pop .36s cubic-bezier(.2, .9, .3, 1.25) backwards; animation-delay: var(--delay, 0ms); }
+  @keyframes pop {
+    0%   { opacity: 0; transform: translateY(10px) scale(.55); }
+    60%  { opacity: 1; transform: translateY(-1px) scale(1.08); }
+    100% { opacity: 1; transform: none; }
+  }
+
+  .caret {
+    position: absolute; width: 2px; height: calc(var(--slot-h) * .5); border-radius: 2px; background: var(--accent);
+    opacity: 0; z-index: 1;
+  }
+  .slot.is-active:not(.is-filled) .caret { opacity: 1; animation: blink 1.15s ease-in-out infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+  .field.is-error .digit { color: var(--danger-text); animation: ripple .56s ease both; animation-delay: calc(var(--i) * 32ms); }
+  @keyframes ripple {
+    0%, 100% { transform: translateX(0); }
+    22% { transform: translateX(-5px); }
+    48% { transform: translateX(4px); }
+    74% { transform: translateX(-2px); }
+  }
+
+  .pass.is-success .digit {
+    color: var(--ok-text);
+    animation: gather .5s cubic-bezier(.65, 0, .3, 1) forwards;
+    animation-delay: calc(var(--i) * 28ms);
+  }
+  @keyframes gather {
+    35% { opacity: 1; }
+    to { opacity: 0; transform: translateX(calc(var(--off) * (100% + 8px))) scale(.2); }
+  }
+
+  .capture {
+    position: absolute; inset: 0; z-index: 2;
+    width: 100%; height: 100%;
+    padding: 0; border: 0; border-radius: 16px;
+    background: transparent;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    caret-color: transparent;
+    font-size: 16px; /* prevents iOS zoom on focus */
+    outline: none;
+    cursor: text;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .capture::selection { background: transparent; }
+  .capture:disabled { cursor: default; }
+
+  .paste-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 0; border: 0; background: none;
+    font-size: 13.5px; font-weight: 500; color: var(--ink-2); cursor: pointer;
+  }
+  .paste-btn:hover { color: var(--accent); }
+  .paste-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+  .status {
+    min-height: 20px;
+    margin: var(--gap-status) 0 var(--gap-status2);
+    text-align: center;
+    font-size: 13.5px;
+    line-height: 20px;
+    color: var(--ink-2);
+    text-wrap: balance;
+    transition: color .2s;
+  }
+  .status[data-kind="error"] { color: var(--danger-text); }
+  .status[data-kind="ok"] { color: var(--ok-text); }
+
+  /* ---------------------------------------------------------------
+     Actions
+  --------------------------------------------------------------- */
+  .btn {
+    position: relative;
+    display: grid; place-items: center;
+    width: 100%; height: var(--btn-h);
+    border: 0; border-radius: 14px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: 15px; font-weight: 600; line-height: 1; letter-spacing: .005em;
+    cursor: pointer;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / .2),
+      0 8px 16px -8px color-mix(in srgb, var(--accent) 80%, transparent);
+    transition: background-color .2s, color .2s, box-shadow .2s, transform .12s;
+  }
+  .btn:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn:disabled { cursor: not-allowed; background: var(--sunk); color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
+  .btn.is-busy:disabled {
+    cursor: progress; background: var(--accent); color: var(--on-accent);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / .2);
+  }
+  .btn-inner { display: inline-flex; align-items: center; gap: 10px; }
+  .spin {
+    display: none; width: 15px; height: 15px; border-radius: 50%;
+    border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+    border-top-color: currentColor;
+    animation: spin .7s linear infinite;
+  }
+  .btn.is-busy .spin { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .resend-row {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+    gap: 0 12px;
+    margin-top: var(--gap-row);
+    font-size: 13.5px; color: var(--ink-2);
+  }
+  .resend-row:has(.paste-btn[hidden]) { justify-content: center; }
+  .resend-group { display: inline-flex; align-items: baseline; gap: 6px; }
+  .resend {
+    position: relative;
+    padding: 4px 0 6px;
+    border: 0; background: none;
+    font-weight: 600; font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+    cursor: default;
+  }
+  .resend::before, .resend::after {
+    content: ""; position: absolute; left: 0; bottom: 0; height: 2px; border-radius: 2px;
+  }
+  .resend::before { right: 0; background: var(--line); }
+  .resend::after { width: calc(var(--p, 0) * 100%); background: var(--accent); }
+  .resend[data-ready="true"] { color: var(--accent); cursor: pointer; }
+  .resend[data-ready="true"]::before, .resend[data-ready="true"]::after { display: none; }
+  .resend[data-ready="true"]:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ---------------------------------------------------------------
+     Demo bar (safe to delete when integrating)
+  --------------------------------------------------------------- */
+  .demo-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 0 6px;
+    min-height: 32px;
+    font-size: 12.5px; color: var(--ink-2);
+  }
+  .demo-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
+  .demo-tag {
+    padding: 3px 8px; border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent); font-size: 11.5px; font-weight: 600;
+  }
+  .text-btn { border: 0; background: none; padding: 4px 0; color: var(--ink-2); cursor: pointer; font-weight: 500; }
+  .text-btn:hover { color: var(--ink); }
+  .text-btn b { font: 500 12.5px var(--font-num); color: var(--ink); }
+
+  .theme-btn {
+    display: grid; place-items: center; width: 32px; height: 32px;
+    border: 0; border-radius: 50%;
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+    box-shadow: inset 0 0 0 1px var(--line);
+    color: var(--ink-2); cursor: pointer;
+    transition: color .2s, background-color .2s;
+  }
+  .theme-btn:hover { color: var(--ink); background: var(--surface); }
+  .theme-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .theme-btn .i-sun { display: none; }
+  :root[data-theme="dark"] .theme-btn .i-sun { display: block; }
+  :root[data-theme="dark"] .theme-btn .i-moon { display: none; }
+
+  /* ---------------------------------------------------------------
+     Motion preferences
+  --------------------------------------------------------------- */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-iteration-count: 1 !important;
+      animation-delay: 0ms !important;
+      transition-duration: .001ms !important;
+      transition-delay: 0ms !important;
+    }
+    .dot::after { display: none; }
+    .slot.is-active:not(.is-filled) .caret { opacity: 1; }
+  }
+
+  @media (max-width: 360px) {
+    .slot { border-radius: 12px; }
+  }
+
+  /* Short windows (small laptops, phones with browser bars): tighten the text too */
+  @media (max-height: 620px) {
+    .title { font-size: 20px; line-height: 24px; }
+    .lede { margin-top: 4px; font-size: 13.5px; line-height: 19px; }
+    .meta { font-size: 12.5px; }
+    .demo-tag { display: none; }
+  }
+</style>
+</head>
+
+<body>
+<main class="stage">
+
+  <div class="pass" id="pass" role="group" aria-labelledby="title">
+
+    <header class="stub">
+      <div class="dial" id="dial" aria-hidden="true">
+        <svg class="dial-svg" viewBox="0 0 160 160">
+          <circle class="ring-track" cx="80" cy="80" r="74"/>
+          <circle class="ring-prog" id="ringProg" cx="80" cy="80" r="74" pathLength="1" transform="rotate(-90 80 80)"/>
+          <g id="segments"></g>
+        </svg>
+        <div class="core">
+          <svg class="core-icon" viewBox="0 0 24 24">
+            <path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-4.5 3.5a.5.5 0 0 1-.8-.4V17H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>
+            <circle cx="8.5" cy="10.5" r="1"/><circle cx="12" cy="10.5" r="1"/><circle cx="15.5" cy="10.5" r="1"/>
+          </svg>
+          <span class="core-count" id="coreCount">10</span>
+          <svg class="core-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" pathLength="1"/></svg>
+        </div>
+      </div>
+
+      <h1 class="title" id="title"></h1>
+      <p class="lede" id="lede"></p>
+
+      <div class="meta">
+        <span class="live" id="live" data-state="live" aria-hidden="true">
+          <i class="dot"></i><span id="liveText"></span>
+        </span>
+        <span class="attempts" id="attempts">
+          <span class="pips" id="pips" aria-hidden="true"></span>
+          <span id="attemptsText"></span>
+        </span>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="views">
+
+        <form class="view" id="form" novalidate>
+          <div class="field" id="field">
+            <div class="tray" id="tray" aria-hidden="true"></div>
+            <input class="capture" id="code" type="text"
+                   inputmode="numeric" autocomplete="one-time-code" enterkeyhint="done"
+                   autocapitalize="off" autocorrect="off" spellcheck="false"
+                   pattern="[0-9]*" aria-label="6-digit verification code" aria-describedby="status">
+          </div>
+
+          <p class="status" id="status" role="status" aria-live="polite" data-kind="info"></p>
+
+          <button class="btn" id="verify" type="submit" disabled>
+            <span class="btn-inner"><i class="spin"></i><span id="verifyLabel"></span></span>
+          </button>
+
+          <div class="resend-row">
+            <button class="paste-btn" id="paste" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/></svg>
+              Paste code
+            </button>
+            <span class="resend-group">
+              <span id="resendHint"></span>
+              <button class="resend" id="resend" type="button" disabled data-ready="false"><span id="resendLabel"></span></button>
+            </span>
+          </div>
+        </form>
+
+        <div class="view view-done" id="done" inert>
+          <button class="btn" id="continue" type="button"></button>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <!-- Demo controls. Set demo: false in CONFIG to hide, or delete this block. -->
+  <div class="demo-bar" id="demoBar">
+    <div class="demo-actions" id="demoActions">
+      <span class="demo-tag">Demo mode</span>
+      <button class="text-btn" id="fillDemo" type="button">Autofill <b>482913</b></button>
+      <button class="text-btn" id="restart" type="button">Restart</button>
+    </div>
+    <button class="theme-btn" id="theme" type="button" aria-label="Toggle dark theme" aria-pressed="false">
+      <svg class="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>
+      <svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
+    </button>
+  </div>
+
+  <div class="sr" id="srLive" role="status" aria-live="polite"></div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ===============================================================
+     3. SETTINGS  -  the part most people edit
+  =============================================================== */
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  const CONFIG = {
+    demo: true,                 // true = show demo controls and accept code 482913. Set false in production.
+    themeToggle: true,          // show the light/dark button
+    length: 6,                  // number of digit boxes (if you change it, also update the "6-digit" wording in TEXT)
+    codeTtl: 90,                // seconds the code stays valid (use the value from your server)
+    resendCooldown: 30,         // seconds before "Send a new code" unlocks
+    maxAttempts: 3,             // wrong tries allowed per code
+    autoSubmit: true,           // check automatically when the last digit is typed
+    maskedTarget: '+91 ••••• ••842',   // where the code was sent (already masked)
+
+    /* ---- Connect your server here ------------------------------
+       verify(code) must return true (correct) or false (wrong).
+       If the network or server fails, throw an error instead.
+
+       Example with fetch:
+         verify: async (code) => {
+           const res = await fetch('/api/verify-otp', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ code })
+           });
+           if (res.status === 401) return false;          // wrong code
+           if (!res.ok) throw new Error('Server error');  // something else broke
+           return true;
+         },
+         resend: async () => {
+           const res = await fetch('/api/resend-otp', { method: 'POST' });
+           if (!res.ok) throw new Error('Could not resend');
+         },
+    ------------------------------------------------------------- */
+    verify: async (code) => { await wait(1100); return code === '482913'; },   // demo only
+    resend: async () => { await wait(600); },                                  // demo only
+
+    // What should happen next? Example: window.location.href = '/dashboard'
+    onVerified: (code) => {},   // runs the moment the code is accepted
+    onContinue: () => {}        // runs when the user presses "Continue"
+  };
+
+  /* Every word the user sees. Edit freely. */
+  const TEXT = {
+    title: 'Check your phone',
+    lede: (target) => `We texted a 6-digit code to <span class="num">${target}</span>.`,
+    hintAuto: 'Type or paste the code. It checks itself after the 6th digit.',
+    hintManual: 'Type or paste the code, then press Verify code.',
+    expiresIn: (t) => `Code expires in ${t}`,
+    expired: 'Code expired',
+    locked: 'Too many attempts',
+    attemptsLeft: (n) => (n <= 0 ? 'No attempts left' : `${n} attempt${n === 1 ? '' : 's'} left`),
+    verify: 'Verify code',
+    verifying: 'Verifying',
+    checking: 'Checking your code…',
+    wrong: 'That code doesn’t match. Check the message and try again.',
+    networkError: 'Couldn’t reach the server. Check your connection and try again.',
+    tooManyAttempts: 'Too many attempts. Send a new code to continue.',
+    expiredMsg: 'This code has expired. Send a new code to continue.',
+    resendHint: 'Didn’t get it?',
+    resendWait: (t) => `Resend in ${t}`,
+    resendReady: 'Send a new code',
+    resending: 'Sending…',
+    resendFailed: 'Couldn’t send a new code. Try again in a moment.',
+    resent: 'New code sent. The previous one no longer works.',
+    pasteEmpty: 'There’s no 6-digit code on your clipboard yet.',
+    pasteBlocked: 'Paste isn’t allowed here. Click a box, then press Ctrl+V (⌘V on Mac).',
+    successTitle: 'Number verified',
+    successLede: (target) => `<span class="num">${target}</span> is confirmed on your account.`,
+    successStatus: 'Number verified.',
+    verifiedAt: (time) => `Verified at ${time}`,
+    cont: 'Continue',
+    srTenSeconds: 'This code expires in 10 seconds.'
+  };
+
+  /* ===============================================================
+     4. HOW IT WORKS  -  you can ignore everything below
+  =============================================================== */
+  const L = CONFIG.length;
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const $ = (id) => document.getElementById(id);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const clamp01 = (x) => Math.min(1, Math.max(0, x));
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const hint = () => (CONFIG.autoSubmit ? TEXT.hintAuto : TEXT.hintManual);
+
+  const el = {
+    pass: $('pass'), dial: $('dial'), prog: $('ringProg'), segWrap: $('segments'),
+    count: $('coreCount'), title: $('title'), lede: $('lede'),
+    live: $('live'), liveText: $('liveText'), attempts: $('attempts'),
+    pips: $('pips'), attemptsText: $('attemptsText'),
+    form: $('form'), field: $('field'), tray: $('tray'), input: $('code'), status: $('status'),
+    paste: $('paste'), verify: $('verify'), verifyLabel: $('verifyLabel'),
+    resend: $('resend'), resendLabel: $('resendLabel'), resendHint: $('resendHint'),
+    done: $('done'), cont: $('continue'), sr: $('srLive'),
+    demoBar: $('demoBar'), demoActions: $('demoActions'),
+    fill: $('fillDemo'), restart: $('restart'), theme: $('theme')
+  };
+
+  // phase: idle | verifying | settling | locked | expired | success
+  const state = { phase: 'idle', attempts: CONFIG.maxAttempts, expiresAt: 0, ttl: CONFIG.codeTtl, resendAt: 0, resending: false };
+  let tween = null, lastP = 0, lastRem = -1, lastUrgent = false, announced = false;
+  let lastReady = null, lastSecs = -1, lastShown = -1, autoTimer = 0;
+
+  /* ---------- build: slots, ring segments, attempt pips ---------- */
+  const slots = [];
+  el.tray.style.setProperty('--len', L);
+  for (let i = 0; i < L; i++) {
+    const s = document.createElement('div');
+    s.className = 'slot';
+    s.style.setProperty('--i', i);
+    s.style.setProperty('--off', (L - 1) / 2 - i);
+    s.innerHTML = '<span class="digit"></span><span class="caret"></span>';
+    el.tray.appendChild(s);
+    slots.push(s);
+  }
+
+  const segs = [];
+  const arc = (r, a0, a1) => {
+    const p = (a) => [80 + r * Math.sin(a * Math.PI / 180), 80 - r * Math.cos(a * Math.PI / 180)];
+    const [x0, y0] = p(a0), [x1, y1] = p(a1);
+    return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  };
+  const step = 360 / L;
+  for (let i = 0; i < L; i++) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('class', 'seg');
+    path.setAttribute('d', arc(60, i * step + 8, (i + 1) * step - 8));
+    path.style.setProperty('--i', i);
+    el.segWrap.appendChild(path);
+    segs.push(path);
+  }
+
+  for (let i = 0; i < CONFIG.maxAttempts; i++) {
+    const pip = document.createElement('i');
+    pip.className = 'pip';
+    el.pips.appendChild(pip);
+  }
+
+  /* ---------- small helpers ---------- */
+  // kind: 'info' (neutral, stays) | 'note' (neutral, clears on typing) | 'error' | 'ok'
+  function setStatus(text, kind = 'info') {
+    el.status.textContent = text;
+    el.status.dataset.kind = kind;
+  }
+
+  function swapText(node, html) {
+    node.innerHTML = html;
+    node.classList.remove('swap');
+    void node.offsetWidth;
+    node.classList.add('swap');
+  }
+
+  function renderAttempts() {
+    const n = state.attempts;
+    [...el.pips.children].forEach((p, i) => p.classList.toggle('is-used', i >= n));
+    el.attemptsText.textContent = TEXT.attemptsLeft(n);
+    el.attempts.dataset.low = String(n <= 1);
+  }
+
+  function setBusy(on) {
+    el.verify.classList.toggle('is-busy', on);
+    el.verify.setAttribute('aria-busy', String(on));
+    el.verifyLabel.textContent = on ? TEXT.verifying : TEXT.verify;
+    el.dial.classList.toggle('is-verifying', on);
+    el.input.readOnly = on;
+  }
+
+  /* ---------- draw: input value -> slots, ring segments, button ---------- */
+  function render() {
+    const v = el.input.value;
+    const focused = document.activeElement === el.input && !el.input.disabled;
+    const sel = Math.min(el.input.selectionStart ?? v.length, L - 1);
+
+    const changed = [];
+    slots.forEach((s, i) => {
+      const ch = v[i] || '';
+      if ((s.dataset.v || '') !== ch) {
+        s.dataset.v = ch;
+        s.firstChild.textContent = ch;
+        s.classList.toggle('is-filled', !!ch);
+        if (ch) changed.push(i);
+      }
+      s.classList.toggle('is-active', focused && i === sel);
+    });
+    changed.forEach((i, n) => {      // several digits at once (paste/autofill) cascade in
+      const d = slots[i].firstChild;
+      d.style.setProperty('--delay', (changed.length > 1 ? n * 42 : 0) + 'ms');
+      d.classList.remove('pop');
+      void d.offsetWidth;
+      d.classList.add('pop');
+    });
+
+    const all = state.phase === 'success';
+    segs.forEach((sg, i) => sg.classList.toggle('is-on', all || i < v.length));
+    el.verify.disabled = state.phase !== 'idle' || v.length !== L;
+    el.paste.hidden = !(state.phase === 'idle' && navigator.clipboard && navigator.clipboard.readText);
+    el.field.classList.toggle('is-focus', focused);
+  }
+
+  function slotFromX(x) {
+    const i = slots.findIndex((s) => x < s.getBoundingClientRect().right);
+    return i === -1 ? L - 1 : i;
+  }
+
+  /* ---------- timers: one animation loop drives the ring + resend ---------- */
+  function startCode() {
+    const now = performance.now();
+    const wind = reduce.matches ? 0 : 900;   // ring "winds up" when a code starts
+    tween = wind ? { t0: now, d: wind, from: 0, to: 1 } : null;
+    state.ttl = CONFIG.codeTtl;
+    state.expiresAt = now + wind + state.ttl * 1000;
+    state.resendAt = now + wind + CONFIG.resendCooldown * 1000;
+    announced = false; lastRem = -1; lastReady = null; lastSecs = -1; lastShown = -1;
+    el.live.dataset.state = 'live';
+    el.liveText.textContent = TEXT.expiresIn(fmt(state.ttl));
+  }
+
+  function updateResend(now) {
+    const left = state.resendAt - now;
+    const ready = left <= 0 && !state.resending;
+    const secs = Math.ceil(Math.max(0, left) / 1000);
+    if (ready !== lastReady || secs !== lastSecs) {
+      lastReady = ready; lastSecs = secs;
+      el.resend.disabled = !ready;
+      el.resend.dataset.ready = String(ready);
+      el.resendLabel.textContent = state.resending ? TEXT.resending
+        : ready ? TEXT.resendReady
+        : TEXT.resendWait(fmt(secs));
+    }
+    el.resend.style.setProperty('--p', clamp01(1 - left / (CONFIG.resendCooldown * 1000)).toFixed(3));
+  }
+
+  function tick(now) {
+    let p;
+    if (tween) {
+      const t = clamp01((now - tween.t0) / tween.d);
+      p = tween.from + (tween.to - tween.from) * easeOut(t);
+      if (t >= 1) tween = null;
+    } else if (state.phase === 'success') {
+      p = 1;
+    } else {
+      p = clamp01((state.expiresAt - now) / (state.ttl * 1000));
+    }
+    lastP = p;
+    el.prog.style.strokeDashoffset = (p - 1).toFixed(4);
+    el.prog.style.opacity = p < 0.004 ? 0 : 1;
+
+    const remMs = state.expiresAt - now;
+    const rem = Math.max(0, Math.ceil(remMs / 1000));
+    const live = ['idle', 'verifying', 'settling'].includes(state.phase);
+    const urgent = live && !tween && remMs > 0 && rem <= 10;
+
+    if (urgent !== lastUrgent) { lastUrgent = urgent; el.dial.classList.toggle('is-urgent', urgent); }
+    if (urgent && rem !== lastRem) { lastRem = rem; el.count.textContent = rem; }
+    if (urgent && !announced) { announced = true; el.sr.textContent = TEXT.srTenSeconds; }
+
+    if (live) {                                   // readable countdown next to the ring
+      const shown = Math.min(state.ttl, rem);
+      if (shown !== lastShown) { lastShown = shown; el.liveText.textContent = TEXT.expiresIn(fmt(shown)); }
+    }
+
+    if (remMs <= 0 && state.phase === 'idle') expire();
+    if (state.phase !== 'success') updateResend(now);
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------- what happens next ---------- */
+  function expire() {
+    const hadFocus = document.activeElement === el.input;
+    state.phase = 'expired';
+    state.resendAt = performance.now();
+    clearTimeout(autoTimer);
+    el.input.value = '';
+    el.input.disabled = true;
+    el.field.classList.add('is-disabled');
+    el.dial.classList.add('is-expired');
+    el.live.dataset.state = 'expired';
+    el.liveText.textContent = TEXT.expired;
+    setStatus(TEXT.expiredMsg, 'error');
+    render();
+    updateResend(performance.now());
+    if (hadFocus) el.resend.focus();
+  }
+
+  function lock() {
+    state.phase = 'locked';
+    state.resendAt = performance.now();
+    el.input.disabled = true;
+    el.field.classList.add('is-disabled');
+    el.live.dataset.state = 'expired';
+    el.liveText.textContent = TEXT.locked;
+    setStatus(TEXT.tooManyAttempts, 'error');
+    render();
+    updateResend(performance.now());
+    el.resend.focus();
+  }
+
+  async function submit() {
+    if (state.phase !== 'idle' || el.input.value.length !== L) return;
+    clearTimeout(autoTimer);
+    const code = el.input.value;
+    state.phase = 'verifying';
+    setBusy(true);
+    setStatus(TEXT.checking);
+    render();
+
+    let ok = false;
+    try {
+      ok = await CONFIG.verify(code);
+    } catch (e) {
+      state.phase = 'idle';
+      setBusy(false);
+      setStatus(TEXT.networkError, 'error');
+      render();
+      return;
+    }
+    ok ? succeed(code) : fail();
+  }
+
+  function fail() {
+    state.attempts = Math.max(0, state.attempts - 1);
+    state.phase = 'settling';
+    renderAttempts();
+    el.field.classList.add('is-error');
+    el.dial.classList.add('is-error');
+    setBusy(false);
+    el.input.readOnly = true;
+    setStatus(TEXT.wrong, 'error');
+    render();
+
+    setTimeout(() => {
+      el.field.classList.remove('is-error');
+      el.dial.classList.remove('is-error');
+      el.input.readOnly = false;
+      el.input.value = '';
+      if (state.attempts <= 0) { lock(); return; }
+      state.phase = 'idle';
+      render();
+      el.input.focus();
+    }, reduce.matches ? 300 : 900);
+  }
+
+  function succeed(code) {
+    state.phase = 'success';
+    if (!reduce.matches) tween = { t0: performance.now(), d: 600, from: lastP, to: 1 };
+    el.dial.classList.remove('is-urgent', 'is-verifying');
+    setBusy(false);
+    el.pass.classList.add('is-success');
+    el.input.blur();
+    setStatus(TEXT.successStatus, 'ok');
+    render();
+    try { CONFIG.onVerified(code); } catch (e) { console.error(e); }
+    el.pass.dispatchEvent(new CustomEvent('otp:verified', { bubbles: true, detail: { code } }));
+
+    setTimeout(() => {
+      const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      swapText(el.title, TEXT.successTitle);
+      swapText(el.lede, TEXT.successLede(CONFIG.maskedTarget));
+      el.liveText.textContent = TEXT.verifiedAt(time);
+      el.attempts.hidden = true;
+      el.form.inert = true;
+      el.done.inert = false;
+      el.cont.focus();
+    }, reduce.matches ? 200 : 1000);
+  }
+
+  async function resend() {
+    if (state.resending || performance.now() < state.resendAt) return;
+    state.resending = true;
+    updateResend(performance.now());
+    try {
+      await CONFIG.resend();
+    } catch (e) {
+      state.resending = false;
+      updateResend(performance.now());
+      setStatus(TEXT.resendFailed, 'error');
+      return;
+    }
+    state.resending = false;
+    state.attempts = CONFIG.maxAttempts;
+    state.phase = 'idle';
+    renderAttempts();
+    el.input.disabled = false;
+    el.input.readOnly = false;
+    el.input.value = '';
+    el.field.classList.remove('is-disabled');
+    el.dial.classList.remove('is-expired');
+    startCode();
+    setStatus(TEXT.resent, 'ok');
+    render();
+    el.input.focus();
+  }
+
+  function reset() {   // used by the demo "Restart" button
+    clearTimeout(autoTimer);
+    state.phase = 'idle';
+    state.attempts = CONFIG.maxAttempts;
+    state.resending = false;
+    el.pass.classList.remove('is-success');
+    el.dial.className = 'dial';
+    el.field.className = 'field';
+    el.attempts.hidden = false;
+    el.form.inert = false;
+    el.done.inert = true;
+    el.input.disabled = false;
+    el.input.readOnly = false;
+    el.input.value = '';
+    lastUrgent = false;
+    swapText(el.title, TEXT.title);
+    swapText(el.lede, TEXT.lede(CONFIG.maskedTarget));
+    setBusy(false);
+    renderAttempts();
+    startCode();
+    setStatus(hint());
+    render();
+    el.input.focus();
+  }
+
+  /* ---------- listen to the user ---------- */
+  el.input.addEventListener('input', () => {
+    const raw = el.input.value;
+    const pos = el.input.selectionStart ?? raw.length;
+    const digitsBefore = raw.slice(0, pos).replace(/\D/g, '').length;
+    const clean = raw.replace(/\D/g, '').slice(0, L);     // digits only, max 6
+    if (raw !== clean) el.input.value = clean;
+    const caret = Math.min(digitsBefore, clean.length);
+    el.input.setSelectionRange(caret, caret);
+
+    if (state.phase === 'idle' && el.status.dataset.kind !== 'info') setStatus(hint());
+    render();
+
+    clearTimeout(autoTimer);
+    if (CONFIG.autoSubmit && clean.length === L) autoTimer = setTimeout(submit, 320);
+  });
+
+  el.input.addEventListener('click', (e) => {     // click a box to edit from there
+    const i = Math.min(slotFromX(e.clientX), el.input.value.length);
+    el.input.setSelectionRange(i, i);
+    render();
+  });
+  ['focus', 'blur', 'keyup', 'select'].forEach((ev) => el.input.addEventListener(ev, render));
+  document.addEventListener('selectionchange', () => { if (document.activeElement === el.input) render(); });
+
+  el.form.addEventListener('submit', (e) => { e.preventDefault(); submit(); });
+  el.resend.addEventListener('click', resend);
+  el.cont.addEventListener('click', () => {
+    try { CONFIG.onContinue(); } catch (e) { console.error(e); }
+    el.pass.dispatchEvent(new CustomEvent('otp:continue', { bubbles: true }));
+  });
+
+  el.paste.addEventListener('click', async () => {
+    if (state.phase !== 'idle') return;
+    try {
+      const text = await navigator.clipboard.readText();
+      const digits = text.replace(/\D/g, '').slice(0, L);
+      if (!digits) { setStatus(TEXT.pasteEmpty, 'note'); el.input.focus(); return; }
+      el.input.value = digits;
+      el.input.focus();
+      el.input.setSelectionRange(digits.length, digits.length);
+      el.input.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (e) {
+      setStatus(TEXT.pasteBlocked, 'note');
+      el.input.focus();
+    }
+  });
+
+  /* ---------- demo controls + theme ---------- */
+  el.demoActions.hidden = !CONFIG.demo;
+  el.theme.hidden = !CONFIG.themeToggle;
+  el.demoBar.hidden = !CONFIG.demo && !CONFIG.themeToggle;
+
+  el.fill.addEventListener('click', () => {
+    if (state.phase !== 'idle') return;
+    el.input.value = '482913';
+    el.input.focus();
+    el.input.setSelectionRange(L, L);
+    el.input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  el.restart.addEventListener('click', reset);
+
+  const root = document.documentElement;
+  const syncTheme = () => el.theme.setAttribute('aria-pressed', String(root.dataset.theme === 'dark'));
+  el.theme.addEventListener('click', () => {
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem('otp-theme', next); } catch (e) {}
+    syncTheme();
+  });
+  syncTheme();
+
+  /* ---------- start ---------- */
+  el.title.textContent = TEXT.title;
+  el.lede.innerHTML = TEXT.lede(CONFIG.maskedTarget);
+  el.verifyLabel.textContent = TEXT.verify;
+  el.resendHint.textContent = TEXT.resendHint;
+  el.cont.textContent = TEXT.cont;
+  renderAttempts();
+  setStatus(hint());
+  startCode();
+  render();
+  requestAnimationFrame(tick);
+  el.input.focus({ preventScroll: true });
+})();
+</script>
+</body>
+</html>
